@@ -1,0 +1,482 @@
+// schema.prisma
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  admin
+  employee
+  customer
+}
+
+enum RoomStatus {
+  vacant_clean
+  vacant_dirty
+  occupied
+  out_of_service
+  reserved
+}
+
+enum BookingStatus {
+  booked
+  checked_in
+  completed
+  cancelled
+}
+
+enum PaymentMethod {
+  cash
+  credit_card
+  online
+}
+
+enum HotelRole {
+  admin
+  manager
+  employee
+  viewer
+}
+
+enum TaskStatus {
+  todo
+  in_progress
+  done
+}
+
+enum TicketStatus {
+  open
+  in_progress
+  resolved
+  closed
+}
+
+enum Priority {
+  low
+  medium
+  high
+  urgent
+}
+
+enum Channel {
+  direct
+  booking_com
+  airbnb
+  mock_ota
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  email     String   @unique
+  password  String
+  role      Role
+  createdAt DateTime @default(now())
+
+  bookings          Booking[]
+  hotelMemberships  HotelMember[]
+  assignedTasks     HousekeepingTask[] @relation("TaskAssignee")
+  assignedTickets   MaintenanceTicket[] @relation("TicketAssignee")
+  auditLogs         AuditLog[]
+}
+
+model Hotel {
+  id        Int      @id @default(autoincrement())
+  name      String
+  address   String
+  city      String
+  phone     String
+
+  rooms              Room[]
+  services           Service[]
+  employees          Employee[]
+  bookings           Booking[]
+  members            HotelMember[]
+  roomTypes          RoomType[]
+  seasons            Season[]
+  ratePlans          RatePlan[]
+  taxes              Tax[]
+  fees               Fee[]
+  tasks              HousekeepingTask[]
+  tickets            MaintenanceTicket[]
+  auditLogs          AuditLog[]
+  apiKeys            ApiKey[]
+  webhookEndpoints   WebhookEndpoint[]
+  channelLinks       ExternalChannelLink[]
+  allotments         Allotment[]
+  pricingRules       PricingRule[]
+  jobLogs            JobLog[]
+  webhookEvents      PublicWebhookEvent[]
+}
+
+model Room {
+  id            Int         @id @default(autoincrement())
+  hotelId       Int
+  roomNumber    String
+  roomType      String?     // Legacy field, kept for backward compatibility
+  roomTypeId    Int?
+  pricePerNight Decimal     @db.Decimal(10,2) // Legacy, can be derived from RoomType
+  status        RoomStatus  @default(vacant_clean)
+
+  hotel      Hotel           @relation(fields: [hotelId], references: [id])
+  type       RoomType?       @relation(fields: [roomTypeId], references: [id])
+  bookings   Booking[]
+  tasks      HousekeepingTask[]
+  tickets    MaintenanceTicket[]
+
+  @@unique([hotelId, roomNumber])
+  @@index([hotelId, status])
+}
+
+model Service {
+  id        Int      @id @default(autoincrement())
+  hotelId   Int
+  name      String
+  price     Decimal  @db.Decimal(10,2)
+
+  hotel     Hotel    @relation(fields: [hotelId], references: [id])
+  logs      RoomServiceLog[]
+}
+
+model Booking {
+  id          Int           @id @default(autoincrement())
+  userId      Int?
+  hotelId     Int
+  roomId      Int
+  guestName   String        // quick MVP: store guest inline
+  guestEmail  String?
+  guestPhone  String?
+  checkIn     DateTime
+  checkOut    DateTime      // expected
+  status      BookingStatus @default(booked)
+  totalAmount Decimal       @db.Decimal(10,2) // Legacy, use grandTotal
+  actualCheckOut DateTime?
+  
+  // Phase 2: Pricing breakdown
+  ratePlanId    Int?
+  nightlyTotal  Decimal     @db.Decimal(10,2) // Room charges across all nights
+  taxTotal      Decimal     @db.Decimal(10,2) @default(0)
+  feeTotal      Decimal     @db.Decimal(10,2) @default(0)
+  serviceTotal  Decimal     @db.Decimal(10,2) @default(0) // From RoomServiceLog
+  grandTotal    Decimal     @db.Decimal(10,2) // nightlyTotal + taxTotal + feeTotal + serviceTotal
+  cancelReason  String?
+
+  // Phase 3: Channel & external references
+  channel     Channel   @default(direct)
+  externalRef String?   // OTA reservation id
+  notes       String?
+
+  user      User?     @relation(fields: [userId], references: [id])
+  hotel     Hotel     @relation(fields: [hotelId], references: [id])
+  room      Room      @relation(fields: [roomId], references: [id])
+  ratePlan  RatePlan? @relation(fields: [ratePlanId], references: [id])
+  services  RoomServiceLog[]
+  payments  Payment[]
+  invoice   Invoice?
+
+  @@index([hotelId, checkIn, checkOut, status])
+  @@index([roomId, checkIn, checkOut])
+  @@index([channel, externalRef])
+}
+
+model RoomServiceLog {
+  id         Int      @id @default(autoincrement())
+  bookingId  Int
+  serviceId  Int
+  quantity   Int      @default(1)
+  totalPrice Decimal  @db.Decimal(10,2)
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+  service Service @relation(fields: [serviceId], references: [id])
+}
+
+model Payment {
+  id           Int           @id @default(autoincrement())
+  bookingId    Int
+  amount       Decimal       @db.Decimal(10,2)
+  method       PaymentMethod
+  paymentDate  DateTime      @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+}
+
+model Employee {
+  id        Int      @id @default(autoincrement())
+  hotelId   Int
+  name      String
+  position  String
+  salary    Decimal  @db.Decimal(10,2)
+  hireDate  DateTime
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
+}
+
+// Phase 2 Models
+
+model HotelMember {
+  id       Int       @id @default(autoincrement())
+  userId   Int
+  hotelId  Int
+  role     HotelRole @default(employee)
+
+  user  User  @relation(fields: [userId], references: [id])
+  hotel Hotel @relation(fields: [hotelId], references: [id])
+
+  @@unique([userId, hotelId])
+  @@index([hotelId])
+  @@index([userId])
+}
+
+model RoomType {
+  id        Int      @id @default(autoincrement())
+  hotelId   Int
+  name      String   // Single, Double, Suite, etc.
+  baseRate  Decimal  @db.Decimal(10,2)
+  capacity  Int      @default(2)
+  desc      String?  // marketing copy
+
+  hotel         Hotel                @relation(fields: [hotelId], references: [id])
+  rooms         Room[]
+  channelLinks  ExternalChannelLink[]
+  allotments    Allotment[]
+  pricingRules  PricingRule[]
+
+  @@unique([hotelId, name])
+  @@index([hotelId])
+}
+
+model Season {
+  id        Int      @id @default(autoincrement())
+  hotelId   Int
+  name      String
+  startDate DateTime
+  endDate   DateTime    // inclusive end
+  rateDelta Decimal     @db.Decimal(10,2) // can be positive/negative
+  percentDelta Int?     // optional +/- percentage adjustment
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
+
+  @@index([hotelId, startDate, endDate])
+}
+
+model RatePlan {
+  id         Int      @id @default(autoincrement())
+  hotelId    Int
+  name       String   // BAR, Non-Refundable, Breakfast Included
+  refundable Boolean  @default(true)
+  minAdvanceDays Int  @default(0)
+  weekendSurcharge Decimal? @db.Decimal(10,2)
+
+  hotel    Hotel     @relation(fields: [hotelId], references: [id])
+  bookings Booking[]
+
+  @@unique([hotelId, name])
+  @@index([hotelId])
+}
+
+model Tax {
+  id        Int      @id @default(autoincrement())
+  hotelId   Int
+  name      String
+  percent   Decimal  @db.Decimal(5,2) // e.g., 10.00%
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
+
+  @@unique([hotelId, name])
+  @@index([hotelId])
+}
+
+model Fee {
+  id        Int      @id @default(autoincrement())
+  hotelId   Int
+  name      String
+  amount    Decimal  @db.Decimal(10,2)
+  perNight  Boolean  @default(false)
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
+
+  @@unique([hotelId, name])
+  @@index([hotelId])
+}
+
+model Invoice {
+  id         Int      @id @default(autoincrement())
+  bookingId  Int      @unique
+  number     String   @unique
+  pdfPath    String
+  issuedAt   DateTime @default(now())
+  total      Decimal  @db.Decimal(10,2)
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+
+  @@index([bookingId])
+}
+
+model HousekeepingTask {
+  id        Int        @id @default(autoincrement())
+  hotelId   Int
+  roomId    Int
+  title     String
+  status    TaskStatus @default(todo)
+  assigneeId Int?
+  dueDate   DateTime?
+  notes     String?
+
+  hotel    Hotel  @relation(fields: [hotelId], references: [id])
+  room     Room   @relation(fields: [roomId], references: [id])
+  assignee User?  @relation("TaskAssignee", fields: [assigneeId], references: [id])
+
+  @@index([hotelId, status])
+  @@index([roomId])
+  @@index([assigneeId])
+}
+
+model MaintenanceTicket {
+  id         Int          @id @default(autoincrement())
+  hotelId    Int
+  roomId     Int?
+  title      String
+  description String?
+  status     TicketStatus @default(open)
+  priority   Priority     @default(medium)
+  assigneeId Int?
+  createdAt  DateTime     @default(now())
+
+  hotel   Hotel  @relation(fields: [hotelId], references: [id])
+  room    Room?  @relation(fields: [roomId], references: [id])
+  assignee User? @relation("TicketAssignee", fields: [assigneeId], references: [id])
+
+  @@index([hotelId, status])
+  @@index([roomId])
+  @@index([assigneeId])
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  hotelId   Int
+  userId    Int?
+  action    String
+  entity    String    // Booking, Room, Payment, Config, etc.
+  entityId  Int?
+  diff      Json?
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
+  user  User? @relation(fields: [userId], references: [id])
+
+  createdAt DateTime  @default(now())
+
+  @@index([hotelId, createdAt])
+  @@index([entity, entityId])
+}
+
+// Phase 3 Models
+
+model ApiKey {
+  id         Int      @id @default(autoincrement())
+  hotelId    Int
+  name       String
+  keyHash    String   // store hash, never plaintext
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime?
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
+
+  @@index([hotelId])
+  @@unique([hotelId, name])
+}
+
+model WebhookEndpoint {
+  id         Int      @id @default(autoincrement())
+  hotelId    Int
+  url        String
+  secret     String
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
+
+  @@index([hotelId])
+}
+
+model ExternalChannelLink {
+  id          Int      @id @default(autoincrement())
+  hotelId     Int
+  roomTypeId  Int?
+  externalId  String   // listing id on OTA
+  provider    Channel
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+
+  hotel    Hotel    @relation(fields: [hotelId], references: [id])
+  roomType RoomType? @relation(fields: [roomTypeId], references: [id])
+
+  @@index([hotelId, provider, externalId])
+}
+
+model Allotment {
+  id        Int      @id @default(autoincrement())
+  hotelId   Int
+  roomTypeId Int
+  date      DateTime
+  quantity  Int      @default(0) // inventory count for that date
+
+  hotel    Hotel    @relation(fields: [hotelId], references: [id])
+  roomType RoomType @relation(fields: [roomTypeId], references: [id])
+
+  @@unique([hotelId, roomTypeId, date])
+  @@index([hotelId, date])
+}
+
+model PricingRule {
+  id        Int      @id @default(autoincrement())
+  hotelId   Int
+  roomTypeId Int?
+  name      String
+  // simple rule engine fields:
+  minOccPct  Int?      // if occupancy >= x%
+  delta      Decimal?  @db.Decimal(10,2) // absolute change
+  pct        Int?      // percentage +/- change
+  minRate    Decimal?  @db.Decimal(10,2)
+  maxRate    Decimal?  @db.Decimal(10,2)
+  active     Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+
+  hotel    Hotel    @relation(fields: [hotelId], references: [id])
+  roomType RoomType? @relation(fields: [roomTypeId], references: [id])
+
+  @@index([hotelId, active])
+}
+
+model JobLog {
+  id        Int      @id @default(autoincrement())
+  name      String
+  hotelId   Int?
+  status    String   // success | error
+  message   String?
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  hotel Hotel? @relation(fields: [hotelId], references: [id])
+
+  @@index([hotelId, createdAt])
+  @@index([name, status])
+}
+
+model PublicWebhookEvent {
+  id        Int      @id @default(autoincrement())
+  hotelId   Int
+  type      String   // booking.created, booking.updated, payment.succeeded, etc.
+  payload   Json
+  createdAt DateTime @default(now())
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
+
+  @@index([hotelId, createdAt])
+  @@index([type])
+}
+

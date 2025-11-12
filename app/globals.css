@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-primary: #606c38;
+  --color-primary-dark: #283618;
+  --color-background: #fefae0;
+  --color-accent: #dda15e;
+  --color-accent-dark: #bc6c25;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  color: var(--color-primary-dark);
+  background: var(--color-background);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  .card {
+    @apply bg-white rounded-xl shadow-md p-6 border border-gray-100;
+  }
+  
+  .btn-primary {
+    @apply bg-[#606c38] text-[#fefae0] px-4 py-2 rounded-lg font-medium 
+           hover:bg-[#4a5530] transition-colors duration-200 shadow-md;
+  }
+  
+  .btn-secondary {
+    @apply bg-[#dda15e] text-[#283618] px-4 py-2 rounded-lg font-medium 
+           hover:bg-[#bc6c25] hover:text-[#fefae0] transition-colors duration-200 shadow-md;
+  }
+  
+  .input-field {
+    @apply w-full px-4 py-2 border border-gray-300 rounded-lg 
+           focus:outline-none focus:ring-2 focus:ring-[#606c38] focus:border-transparent
+           bg-white text-[#283618];
+  }
+  
+  .badge {
+    @apply px-3 py-1 rounded-full text-xs font-semibold;
+  }
+}
+
