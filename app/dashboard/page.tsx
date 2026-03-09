@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import { toNumber } from '@/lib/utils'
 import Link from 'next/link'
+import DashboardCharts from '@/components/DashboardCharts'
 
 async function getDashboardData() {
   const cookieStore = await cookies()
@@ -17,10 +18,12 @@ async function getDashboardData() {
   today.setHours(0, 0, 0, 0)
   const tomorrow = new Date(today)
   tomorrow.setDate(tomorrow.getDate() + 1)
+  const thirtyDaysAgo = new Date(today)
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
   const hotelId = 1 // MVP: single hotel
 
-  const [rooms, allBookings, checkedInBookings] = await Promise.all([
+  const [rooms, allBookings, checkedInBookings, recentBookings, payments, services] = await Promise.all([
     prisma.room.findMany({
       where: { hotelId },
       orderBy: { roomNumber: 'asc' }
@@ -30,6 +33,14 @@ async function getDashboardData() {
       include: {
         room: {
           select: { roomNumber: true, roomType: true }
+        },
+        payments: true,
+        services: {
+          include: {
+            service: {
+              select: { name: true }
+            }
+          }
         }
       },
       orderBy: { checkIn: 'desc' }
@@ -44,6 +55,32 @@ async function getDashboardData() {
           select: { roomNumber: true, roomType: true }
         }
       }
+    }),
+    prisma.booking.findMany({
+      where: {
+        hotelId,
+        checkIn: { gte: thirtyDaysAgo },
+      },
+      include: {
+        payments: true,
+        services: true,
+      },
+      orderBy: { checkIn: 'asc' }
+    }),
+    prisma.payment.findMany({
+      where: {
+        booking: { hotelId },
+        paymentDate: { gte: thirtyDaysAgo },
+      },
+      include: {
+        booking: {
+          select: { checkIn: true }
+        }
+      },
+      orderBy: { paymentDate: 'asc' }
+    }),
+    prisma.service.findMany({
+      where: { hotelId },
     })
   ])
 
@@ -71,9 +108,72 @@ async function getDashboardData() {
     statusCounts[room.status] = (statusCounts[room.status] || 0) + 1
   })
 
+  // Revenue by day (last 30 days)
+  const revenueByDay: Record<string, number> = {}
+  for (let i = 0; i < 30; i++) {
+    const date = new Date(today)
+    date.setDate(date.getDate() - i)
+    const dateStr = date.toISOString().split('T')[0]
+    revenueByDay[dateStr] = 0
+  }
+
+  recentBookings.forEach((booking) => {
+    const checkInStr = new Date(booking.checkIn).toISOString().split('T')[0]
+    if (revenueByDay[checkInStr] !== undefined) {
+      revenueByDay[checkInStr] += toNumber(booking.grandTotal || booking.totalAmount)
+    }
+  })
+
+  // Booking status distribution
+  const bookingStatusCounts: Record<string, number> = {}
+  allBookings.forEach((booking) => {
+    bookingStatusCounts[booking.status] = (bookingStatusCounts[booking.status] || 0) + 1
+  })
+
+  // Revenue by service
+  const revenueByService: Record<string, number> = {}
+  allBookings.forEach((booking) => {
+    booking.services.forEach((serviceLog: any) => {
+      const serviceName = serviceLog.service?.name || 'Unknown'
+      revenueByService[serviceName] = (revenueByService[serviceName] || 0) + toNumber(serviceLog.totalPrice)
+    })
+  })
+
+  // Daily occupancy (last 7 days)
+  const occupancyByDay: Array<{ date: string; occupancy: number }> = []
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date(today)
+    date.setDate(date.getDate() - i)
+    const dateStr = date.toISOString().split('T')[0]
+    
+    const bookingsOnDate = allBookings.filter((b) => {
+      const checkIn = new Date(b.checkIn).toISOString().split('T')[0]
+      const checkOut = new Date(b.checkOut).toISOString().split('T')[0]
+      return dateStr >= checkIn && dateStr < checkOut && (b.status === 'checked_in' || b.status === 'booked')
+    })
+    
+    occupancyByDay.push({
+      date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      occupancy: totalRooms > 0 ? (bookingsOnDate.length / totalRooms) * 100 : 0
+    })
+  }
+
   const reports = {
     occupancyRate,
     roomStatusCounts: statusCounts,
+    revenueByDay: Object.entries(revenueByDay)
+      .map(([date, revenue]) => ({
+        date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        revenue: Number(revenue.toFixed(2))
+      }))
+      .reverse()
+      .slice(0, 30),
+    bookingStatusCounts,
+    revenueByService: Object.entries(revenueByService).map(([name, revenue]) => ({
+      name,
+      revenue: Number(revenue.toFixed(2))
+    })),
+    occupancyByDay,
   }
 
   return { rooms, bookings: allBookings, reports, todayCheckIns, todayCheckOuts }
@@ -148,6 +248,9 @@ export default async function DashboardPage() {
             })}
           </div>
         </div>
+
+        {/* Charts Section */}
+        <DashboardCharts reports={reports} />
 
         {/* Today's Check-ins List */}
         {todayCheckIns.length > 0 && (

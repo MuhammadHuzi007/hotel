@@ -33,6 +33,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Only allow admin role to login
+    if (user.role !== 'admin') {
+      return NextResponse.json(
+        { error: 'Access denied. Admin access required.' },
+        { status: 403 }
+      )
+    }
+
     const session = {
       userId: user.id,
       username: user.username,

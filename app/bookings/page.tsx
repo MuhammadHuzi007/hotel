@@ -23,11 +23,16 @@ async function getBookings() {
     return []
   }
 
-  return res.json()
+  const data = await res.json()
+  // Handle both old format (array) and new format ({ bookings })
+  return Array.isArray(data) ? data : (data.bookings || [])
 }
 
 export default async function BookingsPage() {
   const bookings = await getBookings()
+  
+  // Ensure bookings is always an array
+  const bookingsArray = Array.isArray(bookings) ? bookings : []
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -71,7 +76,14 @@ export default async function BookingsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {bookings.map((booking: any) => (
+              {bookingsArray.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-8 text-center text-[#606c38]">
+                    No bookings found
+                  </td>
+                </tr>
+              ) : (
+                bookingsArray.map((booking: any) => (
                 <tr key={booking.id} className="hover:bg-[#fefae0] transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-semibold text-[#283618]">{booking.guestName}</div>
@@ -109,7 +121,8 @@ export default async function BookingsPage() {
                     </Link>
                   </td>
                 </tr>
-              ))}
+                ))
+              )}
             </tbody>
           </table>
         </div>

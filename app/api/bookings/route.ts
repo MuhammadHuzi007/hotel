@@ -9,11 +9,23 @@ export async function GET(request: NextRequest) {
     
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
+    const startDate = searchParams.get('startDate')
+    const endDate = searchParams.get('endDate')
     const hotelId = parseInt(searchParams.get('hotelId') || '1')
 
     const where: any = { hotelId }
     if (status) {
       where.status = status
+    }
+    if (startDate || endDate) {
+      where.OR = [
+        {
+          AND: [
+            { checkIn: { lte: endDate ? new Date(endDate) : undefined } },
+            { checkOut: { gte: startDate ? new Date(startDate) : undefined } },
+          ],
+        },
+      ]
     }
 
     const bookings = await prisma.booking.findMany({
@@ -37,7 +49,7 @@ export async function GET(request: NextRequest) {
       orderBy: { checkIn: 'desc' }
     })
 
-    return NextResponse.json(bookings)
+    return NextResponse.json({ bookings })
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || 'Failed to fetch bookings' },
@@ -125,7 +137,12 @@ export async function POST(request: NextRequest) {
     const nights = Math.ceil(
       (checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24)
     )
-    const totalAmount = toNumber(room.pricePerNight) * nights
+    const nightlyTotal = toNumber(room.pricePerNight) * nights
+    const taxTotal = 0 // No taxes applied for internal bookings
+    const feeTotal = 0 // No fees applied for internal bookings
+    const serviceTotal = 0 // No services initially
+    const grandTotal = nightlyTotal + taxTotal + feeTotal + serviceTotal
+    const totalAmount = grandTotal // Legacy field
 
     // Create booking in a transaction
     const booking = await prisma.$transaction(async (tx) => {
@@ -139,6 +156,11 @@ export async function POST(request: NextRequest) {
           guestPhone,
           checkIn: checkInDate,
           checkOut: checkOutDate,
+          nightlyTotal,
+          taxTotal,
+          feeTotal,
+          serviceTotal,
+          grandTotal,
           totalAmount,
           status: 'booked',
         },

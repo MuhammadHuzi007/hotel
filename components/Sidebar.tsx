@@ -6,9 +6,13 @@ import { useState } from 'react'
 
 const menuItems = [
   { name: 'Dashboard', href: '/dashboard', icon: '📊' },
+  { name: 'Quick Actions', href: '/quick-actions', icon: '⚡' },
   { name: 'Rooms', href: '/rooms', icon: '🛏️' },
   { name: 'Bookings', href: '/bookings', icon: '📅' },
+  { name: 'Guests', href: '/guests', icon: '👥' },
   { name: 'Services', href: '/services', icon: '✨' },
+  { name: 'Housekeeping', href: '/housekeeping', icon: '🧹' },
+  { name: 'Maintenance', href: '/maintenance', icon: '🔧' },
   { name: 'Reports', href: '/reports', icon: '📈' },
 ]
 
@@ -45,14 +49,14 @@ export default function Sidebar() {
       >
         <div className="flex flex-col h-full">
           {/* Logo/Header */}
-          <div className="flex items-center justify-between p-6 border-b border-[#606c38]">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-[#dda15e] rounded-lg flex items-center justify-center text-2xl">
+          <div className="flex items-center justify-between p-4 border-b border-[#606c38] flex-shrink-0">
+            <div className="flex items-center space-x-2">
+              <div className="w-8 h-8 bg-[#dda15e] rounded-lg flex items-center justify-center text-lg">
                 🏨
               </div>
               <div>
-                <h1 className="text-xl font-bold text-[#fefae0]">Hotel Ops</h1>
-                <p className="text-xs text-[#dda15e]">Management System</p>
+                <h1 className="text-lg font-bold text-[#fefae0]">Hotel Ops</h1>
+                <p className="text-xs text-[#dda15e]">Management</p>
               </div>
             </div>
             <button
@@ -63,8 +67,8 @@ export default function Sidebar() {
             </button>
           </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 overflow-y-auto p-4 space-y-2">
+          {/* Navigation - Scrollable */}
+          <nav className="flex-1 overflow-y-auto p-3 space-y-1 min-h-0">
             {menuItems.map((item) => {
               const isActive = pathname === item.href || pathname?.startsWith(item.href + '/')
               return (
@@ -72,7 +76,7 @@ export default function Sidebar() {
                   key={item.href}
                   href={item.href}
                   className={`
-                    flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-200
+                    flex items-center space-x-2 px-3 py-2 rounded-lg transition-all duration-200 mb-1
                     ${
                       isActive
                         ? 'bg-[#606c38] text-[#fefae0] shadow-lg'
@@ -81,20 +85,20 @@ export default function Sidebar() {
                   `}
                   onClick={() => setIsOpen(false)}
                 >
-                  <span className="text-xl">{item.icon}</span>
-                  <span className="font-medium">{item.name}</span>
+                  <span className="text-lg">{item.icon}</span>
+                  <span className="font-medium text-sm">{item.name}</span>
                 </Link>
               )
             })}
 
             {/* Divider */}
-            <div className="my-4 border-t border-[#606c38]" />
+            <div className="my-2 border-t border-[#606c38]" />
 
-            {/* Additional menu items for Phase 2/3 */}
+            {/* Settings */}
             <Link
               href="/configs"
               className={`
-                flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-200
+                flex items-center space-x-2 px-3 py-2 rounded-lg transition-all duration-200
                 ${
                   pathname === '/configs'
                     ? 'bg-[#606c38] text-[#fefae0] shadow-lg'
@@ -103,15 +107,15 @@ export default function Sidebar() {
               `}
               onClick={() => setIsOpen(false)}
             >
-              <span className="text-xl">⚙️</span>
-              <span className="font-medium">Settings</span>
+              <span className="text-lg">⚙️</span>
+              <span className="font-medium text-sm">Settings</span>
             </Link>
           </nav>
 
-          {/* Footer */}
-          <div className="p-4 border-t border-[#606c38] space-y-3">
-            <div className="flex items-center space-x-3 px-4 py-3 rounded-lg bg-[#606c38] bg-opacity-50">
-              <div className="w-8 h-8 bg-[#dda15e] rounded-full flex items-center justify-center text-sm font-bold">
+          {/* Footer - Always Visible */}
+          <div className="p-3 border-t border-[#606c38] space-y-2 flex-shrink-0 bg-[#283618]">
+            <div className="flex items-center space-x-2 px-3 py-2 rounded-lg bg-[#606c38] bg-opacity-50">
+              <div className="w-8 h-8 bg-[#dda15e] rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
                 A
               </div>
               <div className="flex-1 min-w-0">
@@ -121,7 +125,7 @@ export default function Sidebar() {
             </div>
             <button
               onClick={handleLogout}
-              className="w-full px-4 py-2 rounded-lg bg-[#bc6c25] text-[#fefae0] font-medium hover:bg-[#a55a1f] transition-colors text-sm"
+              className="w-full px-3 py-2 rounded-lg bg-[#bc6c25] text-[#fefae0] font-medium hover:bg-[#a55a1f] transition-colors text-sm"
             >
               Logout
             </button>
